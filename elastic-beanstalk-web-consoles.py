@@ -6,6 +6,8 @@ import webbrowser
 import boto3
 import urllib
 import pprint
+from os.path import expanduser
+import os
 
 DEFAULT_REGION = "us-east-1"
 BASE_URL = 'https://console.aws.amazon.com'
@@ -22,8 +24,10 @@ args = parser.parse_args()
 app_name = args.app_name
 region = args.region
 
-client = boto3.client('elasticbeanstalk', region_name=region)
-envs = client.describe_environments() if app_name is None else client.describe_environments(ApplicationName=app_name)
+eb_client = boto3.client('elasticbeanstalk', region_name=region)
+ec2_client = boto3.client('ec2', region_name=region)
+
+envs = eb_client.describe_environments() if app_name is None else client.describe_environments(ApplicationName=app_name)
 
 print("Elastic Beanstalk environments")
 for index, env in enumerate(envs['Environments'],start=1):
@@ -44,9 +48,18 @@ while True:
 
 environment = envs['Environments'][choice]['EnvironmentName']
 env_id = envs['Environments'][choice]['EnvironmentId']
-resources = client.describe_environment_resources(EnvironmentName=environment)
+resources = eb_client.describe_environment_resources(EnvironmentName=environment)
 
 webbrowser.open(LB_URL % (region,resources['EnvironmentResources']['LoadBalancers'][0]['Name']))
 webbrowser.open(AG_URL % (region,resources['EnvironmentResources']['AutoScalingGroups'][0]['Name']))
 webbrowser.open(EC2_URL % (region,environment))
 webbrowser.open(EB_URL % (region,env_id))
+
+instance_ids = [instance['Id'] for instance in resources['EnvironmentResources']['Instances']]
+
+with open("%s/%s.beanstalk" % (expanduser("~"),environment),'w') as file:
+  response = ec2_client.describe_instances(InstanceIds=instance_ids)
+  instances = response['Reservations'][0]['Instances']
+  file.write(instances[0]['KeyName'] + os.linesep)
+  for data in instances:
+    file.write(data['PrivateIpAddress'] + os.linesep)

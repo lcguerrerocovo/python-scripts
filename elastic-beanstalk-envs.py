@@ -19,10 +19,12 @@ EB_URL = BASE_URL + '/elasticbeanstalk/home?region=%s#/environment/dashboard?env
 parser = argparse.ArgumentParser(description='List current beanstalk environments and open web consoles for configuration')
 parser.add_argument('app_name', nargs='?', default = None, help='Elastic Beanstalk Application Name')
 parser.add_argument('region', nargs='?', default = DEFAULT_REGION, help='AWS Region')
+parser.add_argument('--console', action='store_true')
 
 args = parser.parse_args()
 app_name = args.app_name
 region = args.region
+console = args.console
 
 eb_client = boto3.client('elasticbeanstalk', region_name=region)
 ec2_client = boto3.client('ec2', region_name=region)
@@ -50,16 +52,18 @@ environment = envs['Environments'][choice]['EnvironmentName']
 env_id = envs['Environments'][choice]['EnvironmentId']
 resources = eb_client.describe_environment_resources(EnvironmentName=environment)
 
-webbrowser.open(LB_URL % (region,resources['EnvironmentResources']['LoadBalancers'][0]['Name']))
-webbrowser.open(AG_URL % (region,resources['EnvironmentResources']['AutoScalingGroups'][0]['Name']))
-webbrowser.open(EC2_URL % (region,environment))
-webbrowser.open(EB_URL % (region,env_id))
+if console:
+    webbrowser.open(LB_URL % (region,resources['EnvironmentResources']['LoadBalancers'][0]['Name']))
+    webbrowser.open(AG_URL % (region,resources['EnvironmentResources']['AutoScalingGroups'][0]['Name']))
+    webbrowser.open(EC2_URL % (region,environment))
+    webbrowser.open(EB_URL % (region,env_id))
 
 instance_ids = [instance['Id'] for instance in resources['EnvironmentResources']['Instances']]
 
 with open("%s/%s.beanstalk" % (expanduser("~"),environment),'w') as file:
-  response = ec2_client.describe_instances(InstanceIds=instance_ids)
-  instances = response['Reservations'][0]['Instances']
-  file.write(instances[0]['KeyName'] + os.linesep)
-  for data in instances:
-    file.write(data['PrivateIpAddress'] + os.linesep)
+  for i,id in enumerate(instance_ids):
+    response = ec2_client.describe_instances(InstanceIds=[id])
+    instances = response['Reservations'][0]['Instances']
+    if i == 0: file.write(instances[0]['KeyName'] + os.linesep)
+    for data in instances:
+      file.write(data['PrivateIpAddress'] + os.linesep)

@@ -24,21 +24,19 @@ bucket = args.bucket
 key = args.key
 human = args.human
 
-s3_client = boto3.client('s3')
-response = s3_client.list_objects_v2(
-    Bucket=bucket,
-    Prefix=key
-)
+s3 = boto3.resource('s3')
+client = boto3.client('s3')
+paginator = client.get_paginator('list_objects')
+result = paginator.paginate(Bucket=bucket, Delimiter='/', Prefix=key)
 
-paths = {}
-for obj in response['Contents']:
-    one_level = obj['Key'].split("/")[len(key.split("/"))]
-    if not one_level in paths:
-        paths[one_level] = obj['Size']
-    else: paths[one_level] = paths[one_level] + obj['Size']
+prefixes = {}
+
+for prefix in result.search('CommonPrefixes'):
+    prefix = prefix.get('Prefix')
+    prefixes[prefix] = sum(_.size for _ in s3.Bucket(bucket).objects.filter(Prefix=prefix))
 
 print("bucket:    %s" % bucket)
 print("base path: %s" % key)
-print("{0:50} {1}".format("key","size"))
-for key, value in paths.iteritems():
-    print("{0:50} {1:>10}".format(key,get_human_readable(value) if human else value))
+print("{0:60} {1:>15}".format("key","size"))
+for key, value in prefixes.iteritems():
+    print("{0:60} {1:>15}".format(key.split('/')[-2],get_human_readable(value) if human else value))
